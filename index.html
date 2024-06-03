@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@300..700&family=Hanken+Grotesk:wght@300&family=Urbanist:ital,wght@0,100..900;1,100..900&display=swap"
+        rel="stylesheet">
+        <link href="/styles/style.css" rel="stylesheet">
+   
+
+    
+</head>
+
+<body>
+
+    <div id="mydiv"></div>
+
+
+    <script type="text/babel">
+
+        const { useState, useEffect, useRef } = React;
+
+
+        const FlagGuessingGame = () => {
+            const [time, setTime] = useState(5);
+            const inputElement = useRef()
+            // Group related state variables into an object
+            const [gameState, setGameState] = useState({
+                answer: '', // feebdack to user guess
+                country: [], // selected country
+                countryList: [], // list of countries
+                countryName: [], // name of random country
+                guess: "", // guess from radio buttons
+                hints: [], // array of hints from country
+                showName: false, // display the name of the country when guess is submited
+                startGame: false, // variable to start game
+                score: 0, // score
+                total: 0, // total of games
+                options: [], // array to store 5 random countries
+                isDisabled: false, // variable to avoid user to submit answer twice
+                hoverStates: [false, false], // control hover of the guesses
+                loading: true // executes after API call 
+            });
+
+            // API endpoint
+            const BASE_URL = "https://restcountries.com/v3.1/all";
+
+            // Fetch countries from API when component mounts
+            useEffect(() => {
+                const fetchCountries = async () => {
+                    try {
+                        const response = await fetch(BASE_URL);
+                        const countryList = await response.json();
+                        const options = getCountries(countryList)
+
+                        // Randomly select one country to be guessed
+                        const randomNum = Math.floor(Math.random() * 5);
+                        const randomCountry = countryList.find((item) => item.name.common === options[randomNum]);
+                        const hintsArray = [randomCountry?.region, randomCountry?.capital];
+
+                        // Update game state
+                        setGameState({
+                            ...gameState,
+                            hints: hintsArray,
+                            options,
+                            countryList,
+                            country: randomCountry,
+                            countryName: randomCountry.name.common,
+                            loading: false
+                        });
+
+
+                    } catch (error) {
+                        console.error("Error fetching countries:", error);
+                    }
+                };
+
+                fetchCountries();
+            }, []);
+
+            // Handler for user input change
+            const handleChange = (e) => {
+                setGameState({
+                    ...gameState,
+                    guess: e.target.value,
+                });
+            };
+
+            const getCountries = (data) => {
+                const options = [];
+                const selectedCountries = new Set(); // Using a Set to ensure uniqueness
+
+                while (options.length < 5) {
+                    const randomNum = Math.floor(Math.random() * data.length);
+                    const randomCountry = data[randomNum].name.common;
+
+                    // Check if the country is already selected
+                    if (!selectedCountries.has(randomCountry)) {
+                        options.push(randomCountry);
+                        selectedCountries.add(randomCountry);
+                    }
+                }
+
+                return options;
+            };
+
+            // Handler for checking user's answer
+            const checkAnswer = () => {
+                // Check if the guess is correct
+                const isCorrect = gameState.guess === gameState.countryName;
+                const wrongAnswersArray = ["Nice try, but that's not the flag we're looking for!", "Close, but no flag! Try another one!", "Oh no, that's not it! Keep waving your guesses around!", "Well, that's a flagrant mistake! Try again!", "Wrong flag! You're not even in the right ballpark!"];
+                const rightAnswersArray = ["Well, look who's a flag whisperer! Correct!", "Wow, impressive flag-finding skills!", "Congratulations, you're right on the money!", "Bravo! You're a flag-finding genius!", "You've nailed it! That's the flag!"];
+
+                // Play audio based on correctness
+                play(isCorrect ? 'right' : 'wrong');
+                // Update answer and score
+                const newAnswer = isCorrect ? getRandomItem(rightAnswersArray) : getRandomItem(wrongAnswersArray);
+
+                setGameState({
+                    ...gameState,
+                    answer: newAnswer,
+                    score: gameState.score + (isCorrect ? 1 : 0),
+                    total: gameState.total + 1,
+                    showName: true,
+                    isDisabled: true,
+                });
+            };
+
+            // Handler for reloading the game
+            const handleReload = () => {
+
+                const options = getCountries(gameState.countryList)
+
+                // Randomly select one country to be guessed
+                const randomNum = Math.floor(Math.random() * 5);
+                const randomCountry = gameState.countryList.find((item) => item.name.common === options[randomNum]);
+                const hintsArray = [randomCountry?.region, randomCountry?.capital];
+
+                // Reset game state
+                setGameState({
+                    ...gameState,
+                    options: options,
+                    country: randomCountry,
+                    hints: hintsArray,
+                    countryName: randomCountry.name.common,
+                    guess: '',
+                    answer: '',
+                    showName: false,
+                    total: gameState.total + 1,
+                    isDisabled: false,
+                });
+
+                setTime(20)
+            };
+
+            // Countdown timer functionality
+
+            useEffect(() => {
+                let timer = setInterval(() => {
+
+                    setTime((time) => {
+                        if (time === 0) {
+                            clearInterval(timer);
+                            // clicks on the next button if timeout
+                            inputElement.current.click()
+                        } else if (gameState.showName) {
+                            // stops timer if user submits answer
+                            clearInterval(timer);
+                            return time
+                        } else {
+                            // countdown
+                            return time - 1;
+                        }
+
+                    });
+
+                }, 1000);
+
+                // cleanup function
+
+                return () => {
+                    clearInterval(timer);
+                };
+
+            }, [gameState.showName, gameState.countryName]);
+
+
+            // Handler for initial click to start the game
+            const handleInitialClick = () => {
+                setGameState({
+                    ...gameState,
+                    startGame: true,
+                });
+
+            };
+
+            // Helper function to get a random item from an array
+            const getRandomItem = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+
+            return (
+                <>
+                    <div className={gameState.startGame ? 'animate' : ''} onClick={handleInitialClick} id="mydiv2">
+
+                        {gameState.loading ? <h1>Loading...</h1> : <h1>Start Game</h1>}
+
+                    </div>
+                    <main>
+                        <div className="flex-container-row">
+                            <div className="flex-container flex-item pad">
+                                <p>{gameState.answer}</p>
+                                <p> Score:{gameState.score}/{gameState.total}</p>
+                                <p>{time}</p>
+                            </div>
+                            <div className="flex-container flex-item">
+                                {gameState.showName ? <h2 className="small-height">{gameState.countryName}</h2> : <h2 className="small-height"></h2>}
+                                <img className={'flag'} src={gameState.country?.flags?.png} />
+                                <div className="flex-container">
+                                    {/* Render options for user to choose from */}
+                                    {gameState.options.map((option) => (
+                                        <div className="flex-container-row2" key={option}>
+                                            <label htmlFor={option}>{option}</label>
+                                            <input id={option} onChange={handleChange} type="radio" name="options" value={option} />
+                                        </div>
+                                    ))}
+                                    <div className="flex-container-row">
+                                        {/* Submit button */}
+                                        <button disabled={gameState.isDisabled} onClick={checkAnswer}>Submit</button>
+                                        {/* Reload button */}
+                                        <button ref={inputElement} onClick={handleReload}>Skip/Next</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex-container flex-item">
+                                {/* Render hints for the selected country */}
+                                {gameState.hints.map((hint, index) => (
+                                    <a key={index} className="squiggle"
+                                        onClick={() => setGameState({
+                                            ...gameState,
+                                            hoverStates: gameState.hoverStates.map((prevState, i) => i === index ? true : prevState)
+                                        })}
+                                        onMouseLeave={() => setGameState({
+                                            ...gameState,
+                                            hoverStates: gameState.hoverStates.map((prevState, i) => i === index ? false : prevState)
+                                        })}
+                                    >
+                                        <p className="small-height small-width">{gameState.hoverStates[index] ? hint : `Hint ${index + 1}: ${index === 0 ? 'Continent' : 'Capital city'}`}</p>
+                                    </a>
+                                ))}
+                            </div>
+                        </div>
+                        <div id="mydiv3">
+                            {/* Render all country flags */}
+                            {gameState.countryList.map((country, index) => (
+                                <img className="flags" key={index} src={country.flags.png} />
+                            ))}
+                        </div>
+                    </main>
+                </>
+            );
+        };
+
+
+        const container = document.getElementById("mydiv");
+
+        if (container) {
+            const root = ReactDOM.createRoot(container);
+            root.render(<FlagGuessingGame />);
+
+        }
+
+
+        
+var context;
+var bufferLoader;
+var audioBuffers = {};
+
+// Fix up prefixing
+context = new (window.AudioContext || window.webkitAudioContext)();
+
+if (!context.createGain)
+    context.createGain = context.createGainNode;
+if (!context.createDelay)
+    context.createDelay = context.createDelayNode;
+if (!context.createScriptProcessor)
+    context.createScriptProcessor = context.createJavaScriptNode;
+
+window.requestAnimFrame = (function () {
+    return window.requestAnimationFrame ||
+        window.webkitRequestAnimationFrame ||
+        window.mozRequestAnimationFrame ||
+        window.oRequestAnimationFrame ||
+        window.msRequestAnimationFrame ||
+        function (callback) {
+            window.setTimeout(callback, 1000 / 60);
+        };
+})();
+
+function playSound(buffer, time) {
+    var source = context.createBufferSource();
+    source.buffer = buffer;
+    source.connect(context.destination);
+    source[source.start ? 'start' : 'noteOn'](time);
+}
+
+function loadSounds(obj, soundMap, callback) {
+    var names = [];
+    var paths = [];
+    for (var name in soundMap) {
+        var path = soundMap[name];
+        names.push(name);
+        paths.push(path);
+    }
+
+    bufferLoader = new BufferLoader(context, paths, function (bufferList) {
+        for (var i = 0; i < bufferList.length; i++) {
+            var buffer = bufferList[i];
+            var name = names[i];
+            obj[name] = buffer;
+            audioBuffers[name] = buffer;
+        }
+        if (callback) {
+            callback();
+        }
+    });
+    bufferLoader.load();
+}
+
+function BufferLoader(context, urlList, callback) {
+    this.context = context;
+    this.urlList = urlList;
+    this.onload = callback;
+    this.bufferList = new Array();
+    this.loadCount = 0;
+}
+
+BufferLoader.prototype.loadBuffer = function (url, index) {
+    var request = new XMLHttpRequest();
+    request.open("GET", url, true);
+    request.responseType = "arraybuffer";
+
+    var loader = this;
+
+    request.onload = function () {
+        loader.context.decodeAudioData(
+            request.response,
+            function (buffer) {
+                if (!buffer) {
+                    alert('error decoding file data: ' + url);
+                    return;
+                }
+                loader.bufferList[index] = buffer;
+                if (++loader.loadCount == loader.urlList.length)
+                    loader.onload(loader.bufferList);
+            },
+            function (error) {
+                console.error('decodeAudioData error', error);
+            }
+        );
+    }
+
+    request.onerror = function () {
+        alert('BufferLoader: XHR error');
+    }
+
+    request.send();
+}
+
+BufferLoader.prototype.load = function () {
+    for (var i = 0; i < this.urlList.length; ++i)
+        this.loadBuffer(this.urlList[i], i);
+}
+
+
+loadSounds(audioBuffers, {
+    'right': '/right.mp3',
+    'wrong': '/wrong.mp3'
+}, function () {
+    console.log('Audio files loaded successfully.');
+});
+
+function play(type) {
+    if (!audioBuffers[type]) {
+        console.error("Audio buffer not found for type: " + type);
+        return;
+    }
+
+    playSound(audioBuffers[type], 0);
+}
+
+
+
+
+    </script>
+
+
+
+</body>
+
+</html>
